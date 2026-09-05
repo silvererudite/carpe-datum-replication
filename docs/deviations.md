@@ -197,4 +197,4 @@ assumed.
 | `test.h5` row count | 404,000 (not exactly 400k) |
 | **Eval-slice gate:** signal fraction of the first 200,000 rows of `test.h5` | **0.4994 — PASS** ([0.45, 0.55] window; head-of-file slice is legitimate, seed-pinned fallback not triggered) |
 | File is shuffled | yes, but imperfectly: per-10k-block signal fraction spans 0.479–0.546, ~3× wider than i.i.d. shuffling predicts. Harmless at 200k; do not take a small contiguous slice as a balanced debug set. |
-| Zenodo md5s match the record | `test.h5` confirmed; `train.h5`/`val.h5` pending download completion |
+| Zenodo md5s match the record | all three confirmed: `train.h5` 45663819…, `val.h5` dca4b724…, `test.h5` 13163479… |

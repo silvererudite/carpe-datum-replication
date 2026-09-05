@@ -18,6 +18,7 @@ deleted.
 | D-004 | 2026-09-05 | Model-ladder widths recomputed; `CLAUDE.md` examples undershoot their targets | benign |
 | D-005 | 2026-09-05 | Apple M4 / MPS / fp32 instead of a CUDA GPU | unknown |
 | D-006 | 2026-09-05 | Added `tables` (PyTables) to the dependency list | benign |
+| D-007 | 2026-09-05 | `pandas` pinned to < 3; pandas 3.x cannot read this dataset | benign |
 
 ---
 
@@ -157,3 +158,43 @@ budget, the pre-committed fallback is to drop the row and fit a 3×4 grid.
 `CLAUDE.md`'s package list omits `tables` (PyTables), but `pandas.read_hdf` — the
 recommended read path for these pandas-format HDF5 files — requires it. Added to
 `pyproject.toml`.
+
+## D-007 — `pandas` pinned to < 3
+
+**Class: benign.**
+
+`CLAUDE.md` calls `pandas.read_hdf` "the easiest path". It is — but not on pandas 3.x.
+These files are pandas `frame_table`s written with pandas 0.15.2 (2015), whose HDF5
+attributes are byte strings; pandas 3.0.5 does `if "table" not in pt` against those bytes
+and raises `TypeError: a bytes-like object is required, not 'str'`. Verified on
+`data/test.h5`, 2026-09-05. pandas 2.3.3 reads the same file correctly, so
+`pyproject.toml` pins `pandas>=2.2,<3`.
+
+Separately, and worth knowing before reaching for it: **h5py cannot read these files at
+all.** The table is blosc-compressed and h5py does not ship the filter plugin — it fails
+with `can't open directory .../hdf5/2.0.0-arm64/lib/plugin`. PyTables ships blosc and
+reads it fine, which is the real reason `tables` is a hard dependency (D-006), not just a
+pandas backend.
+
+The fast path the feature cache should use is PyTables directly (~10× faster than
+`read_hdf`, 200k rows in ~0.2 s); the block column order was verified identical to the
+DataFrame column order, so `values_block_0[:, :800].reshape(-1, 200, 4)` is exact. Both
+paths were cross-checked to return identical values. Details in `src/jetscaling/data.py`.
+
+---
+
+# Verified at scaffold time
+
+Facts checked against the real files on 2026-09-05, before any training. These are not
+deviations — they are the assumptions the scaffold rests on, confirmed rather than
+assumed.
+
+| Assumption | Status |
+|---|---|
+| HDF5 key is `table`, format is `frame_table` | confirmed |
+| 806 columns: 800 constituent + `truthE/PX/PY/PZ` + `ttv` + `is_signal_new` | confirmed |
+| Constituent components ordered (E, px, py, pz), pT-descending, zero-padded | confirmed |
+| `test.h5` row count | 404,000 (not exactly 400k) |
+| **Eval-slice gate:** signal fraction of the first 200,000 rows of `test.h5` | **0.4994 — PASS** ([0.45, 0.55] window; head-of-file slice is legitimate, seed-pinned fallback not triggered) |
+| File is shuffled | yes, but imperfectly: per-10k-block signal fraction spans 0.479–0.546, ~3× wider than i.i.d. shuffling predicts. Harmless at 200k; do not take a small contiguous slice as a balanced debug set. |
+| Zenodo md5s match the record | `test.h5` confirmed; `train.h5`/`val.h5` pending download completion |

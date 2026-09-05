@@ -49,7 +49,44 @@ def md5sum(path: Path, chunk: int = 1 << 22) -> str:
     return h.hexdigest()
 
 
-def download(name: str, dest_dir: Path, expected_md5: str, expected_size: int) -> Path:
+def _fetch_once(name: str, part: Path, expected_size: int) -> int:
+    """One attempt. Appends to `part`, resuming if it already has bytes.
+    Returns the size of `part` afterwards. A short read is not an error here --
+    the caller decides whether to retry."""
+    have = part.stat().st_size if part.exists() else 0
+    url = ZENODO_URL.format(name=name)
+    req = urllib.request.Request(url, headers={"User-Agent": "jet-scaling-replication/0.1"})
+    if have:
+        req.add_header("Range", f"bytes={have}-")
+
+    with urllib.request.urlopen(req) as resp:
+        if have and resp.status != 206:
+            # Server ignored Range: restart cleanly rather than append a second copy.
+            part.unlink(missing_ok=True)
+            have = 0
+        mode = "ab" if have else "wb"
+        with part.open(mode) as out:
+            done = have
+            try:
+                while block := resp.read(CHUNK):
+                    out.write(block)
+                    done += len(block)
+                    print(f"\r{name}: {done / 1e6:8.0f} / {expected_size / 1e6:.0f} MB"
+                          f"  {100.0 * done / expected_size:5.1f}%", end="", flush=True)
+            except (urllib.error.URLError, ConnectionError, TimeoutError, OSError) as exc:
+                print(f"\n{name}: stream broke at {done / 1e6:.0f} MB ({exc})")
+    print()
+    return part.stat().st_size
+
+
+def download(name: str, dest_dir: Path, expected_md5: str, expected_size: int,
+             max_attempts: int = 6) -> Path:
+    """Download with resume and retry. Verifies size BEFORE md5.
+
+    A truncated transfer and a corrupt transfer need opposite responses -- resume the
+    first, discard the second -- and md5 alone cannot tell them apart, because the
+    checksum of a short file is wrong for the boring reason. So size is checked first.
+    """
     dest = dest_dir / name
     part = dest.with_suffix(dest.suffix + ".part")
 
@@ -58,41 +95,41 @@ def download(name: str, dest_dir: Path, expected_md5: str, expected_size: int) -
         if md5sum(dest) == expected_md5:
             print(f"{name}: OK")
             return dest
-        print(f"{name}: md5 MISMATCH -- redownloading")
+        print(f"{name}: md5 MISMATCH on a complete file -- discarding and refetching")
         dest.unlink()
 
-    have = part.stat().st_size if part.exists() else 0
-    if have >= expected_size:
-        have = 0
-        part.unlink(missing_ok=True)
-
-    url = ZENODO_URL.format(name=name)
-    req = urllib.request.Request(url, headers={"User-Agent": "jet-scaling-replication/0.1"})
-    if have:
-        req.add_header("Range", f"bytes={have}-")
-        print(f"{name}: resuming at {have / 1e6:.0f} MB")
-
-    with urllib.request.urlopen(req) as resp, part.open("ab" if have else "wb") as out:
-        if have and resp.status != 206:
-            # Server ignored the Range header; start over rather than corrupt the file.
-            out.close()
+    for attempt in range(1, max_attempts + 1):
+        have = part.stat().st_size if part.exists() else 0
+        if have > expected_size:
+            print(f"{name}: partial is larger than expected -- discarding")
             part.unlink(missing_ok=True)
-            raise RuntimeError(f"{name}: server refused resume (HTTP {resp.status}); rerun")
-        done = have
-        while block := resp.read(CHUNK):
-            out.write(block)
-            done += len(block)
-            pct = 100.0 * done / expected_size
-            print(f"\r{name}: {done / 1e6:8.0f} / {expected_size / 1e6:.0f} MB  {pct:5.1f}%",
-                  end="", flush=True)
-    print()
+            have = 0
+        if have:
+            print(f"{name}: resuming at {have / 1e6:.0f} MB (attempt {attempt}/{max_attempts})")
 
-    got = md5sum(part)
-    if got != expected_md5:
-        raise RuntimeError(f"{name}: md5 {got} != expected {expected_md5}; file not moved into place")
-    part.rename(dest)
-    print(f"{name}: OK ({dest})")
-    return dest
+        try:
+            size = _fetch_once(name, part, expected_size)
+        except urllib.error.URLError as exc:
+            print(f"{name}: connection failed ({exc}); attempt {attempt}/{max_attempts}")
+            continue
+
+        if size < expected_size:
+            print(f"{name}: TRUNCATED at {size / 1e6:.0f} / {expected_size / 1e6:.0f} MB"
+                  f" -- attempt {attempt}/{max_attempts}, will resume")
+            continue
+
+        got = md5sum(part)
+        if got != expected_md5:
+            # Full size, wrong bytes: resuming cannot repair this. Start over.
+            print(f"{name}: md5 {got} != {expected_md5} at full size -- corrupt, restarting")
+            part.unlink(missing_ok=True)
+            continue
+
+        part.rename(dest)
+        print(f"{name}: OK ({dest})")
+        return dest
+
+    raise RuntimeError(f"{name}: failed after {max_attempts} attempts; rerun to resume")
 
 
 def check(dest_dir: Path) -> int:
@@ -155,9 +192,18 @@ def main() -> int:
     total = sum(ZENODO_FILES[n][1] for n in names)
     print(f"Zenodo record: {ZENODO_RECORD}")
     print(f"Downloading {len(names)} file(s), {total / 1e9:.2f} GB -> {args.dir}\n")
+    failed = []
     for name in names:
         expected_md5, size = ZENODO_FILES[name]
-        download(name, args.dir, expected_md5, size)
+        try:
+            download(name, args.dir, expected_md5, size)
+        except Exception as exc:  # keep going: one bad transfer should not block the rest
+            print(f"{name}: FAILED -- {exc}")
+            failed.append(name)
+
+    if failed:
+        print(f"\nIncomplete: {', '.join(failed)}. Rerun to resume from the .part files.")
+        return 1
     print("\nDone. Cite BOTH the Zenodo DOI and arXiv:1902.09914.")
     return 0
 

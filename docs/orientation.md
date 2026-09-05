@@ -149,6 +149,12 @@ Repo, environment, configs, pre-registration committed before any training.
 ### 6.1 — Data (`data.py`, notebook 01) — build step 2
 Read HDF5 row slices → 4-vectors → 7 features + mask. Then the feature cache, then the
 nested D-subsampling.
+
+*Already settled for you, so you do not re-derive it:* the format facts are verified and
+written into `data.py`'s docstring (key, 806 columns, block layout, the two read paths),
+h5py cannot read these files, pandas must be < 3, and the **eval-slice gate passed** —
+signal fraction 0.4994 on the first 200k of `test.h5`. See `deviations.md`, "Verified at
+scaffold time".
 **Checks:** plot one jet in (Δη, Δφ) with marker size ∝ pT — a top jet should look
 three-prong-ish, QCD more like one blob. Constituent multiplicity histogram. Fraction of
 jet pT captured by the leading 64 constituents (this number settles `D-003`).

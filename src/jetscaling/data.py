@@ -3,22 +3,36 @@
 STATUS: contract only. Implement in build step 2/3 (see docs/orientation.md 6.1).
 
 ------------------------------------------------------------------------------
-The raw format (Zenodo 10.5281/zenodo.2603256)
+The raw format (Zenodo 10.5281/zenodo.2603256) -- VERIFIED 2026-09-05 on test.h5
 ------------------------------------------------------------------------------
-train.h5 / val.h5 / test.h5 are *pandas* HDF5 tables (key "table"), so
-`pandas.read_hdf(path, key="table", start=i, stop=j)` gives you row slices without
-loading 1.2M jets into RAM. Columns per jet:
+Pandas `frame_table` (pandas_version 0.15.2) under key "table". 806 columns:
 
     E_0, PX_0, PY_0, PZ_0, ..., E_199, PX_199, PY_199, PZ_199   (800 float32)
-    truth-top four-momentum, ttv, is_signal_new                 (metadata, 6 columns)
-
-(806 columns total. The Zenodo record documents the truth-momentum columns only
-informally as "truth_px etc." -- print `df.columns[-8:]` on first read and pin the exact
-spelling here. The pandas key is "table"; if that raises, list the keys with
-`pandas.HDFStore(path).keys()`.)
+    truthE, truthPX, truthPY, truthPZ                           (4 float32)
+    ttv, is_signal_new                                          (2 int64)
 
 Constituents are pT-ordered, highest first, and zero-padded: a constituent is real
-iff E > 0. Label `is_signal_new`: 1 = top, 0 = QCD.
+iff E > 0. `is_signal_new`: 1 = top, 0 = QCD. test.h5 holds 404,000 rows.
+
+TWO READ PATHS, both verified to give identical values:
+
+1. `pandas.read_hdf(path, key="table", start=i, stop=j)` -- the documented route.
+   REQUIRES pandas < 3: pandas 3.x raises `TypeError: a bytes-like object is
+   required, not 'str'` on this file's bytes-valued `pandas_type` attribute.
+   Pinned in pyproject.toml (deviation D-007).
+
+2. PyTables directly -- ~10x faster and what the feature cache should use:
+
+       with tables.open_file(path) as f:
+           rows = f.root.table.table.read(start, stop)
+       p4     = rows["values_block_0"][:, :800].reshape(-1, 200, 4)   # (E,px,py,pz)
+       labels = rows["values_block_1"][:, 1]                          # is_signal_new
+
+   Block column order was verified identical to the DataFrame column order, so the
+   reshape above is exact. 200k rows read in ~0.2 s.
+
+h5py CANNOT read these files: the table is blosc-compressed and h5py does not ship
+the filter plugin ("can't open directory .../hdf5/.../plugin"). PyTables does.
 
 ------------------------------------------------------------------------------
 The features we build (fixed by the pre-registration -- do not add features later)
@@ -140,10 +154,14 @@ def fixed_eval_slice(cfg: dict) -> JetArrays:
     the fit is a number measured on exactly these jets. Assert the returned shape and
     the label sum against values recorded in the run JSON of the first run.
 
-    CHECK BEFORE TRUSTING IT: a contiguous head-of-file slice is only valid if the file
-    is shuffled. Assert the signal fraction is within [0.45, 0.55]. If test.h5 turns out
-    to be ordered by label, the first 200k rows would be one class and every loss in the
-    sweep would be meaningless -- fall back to a seed-pinned random 200k (contingency is
-    pre-registered in preregistration.md section 2) and log the deviation.
+    GATE, ALREADY MEASURED (2026-09-05): signal fraction of the first 200,000 rows of
+    test.h5 is 0.4994 -- PASSES the pre-registered [0.45, 0.55] window, so the
+    head-of-file slice is legitimate and the seed-pinned fallback is not triggered.
+    Assert this value (tolerance ~1e-3) at load time so a future file swap is caught.
+
+    Caveat worth knowing: the file is shuffled but not perfectly. Per-10k-block signal
+    fractions range 0.479-0.546, a spread ~3x wider than i.i.d. shuffling predicts.
+    Irrelevant for a 200k slice; a real trap if you grab the first 1k rows for a quick
+    debug set and get a lopsided sample. Shuffle small debug slices yourself.
     """
     raise NotImplementedError("build step 2")

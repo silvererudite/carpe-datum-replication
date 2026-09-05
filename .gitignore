@@ -1,0 +1,27 @@
+# Data: never committed (1.7 GB of HDF5 + derived caches)
+data/*
+!data/.gitkeep
+
+# Derived feature caches / memmaps
+*.npy
+*.npz
+*.memmap
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Results: run JSONs and figures ARE committed (they are the evidence trail).
+# Only scratch output is ignored.
+results/scratch/
+!results/runs/
+!results/figures/
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

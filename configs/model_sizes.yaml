@@ -1,0 +1,45 @@
+# Model-size ladder for the N axis of the sweep.
+#
+# Parameter count of one pre-LN encoder block (d = d_model, ff_mult = 4):
+#     attention  q,k,v,o : 4 * d^2
+#     feed-forward       : 2 * d * (ff_mult * d) = 8 * d^2
+#     -> ~12 * d^2 per layer, plus O(d) LayerNorm/bias terms.
+# Total ~ 12 * d^2 * n_layers + input embed (n_feat * d) + head (d + 1).
+#
+# NOTE (logged as D-004 in docs/deviations.md): the example (n_layers, d_model)
+# pairs in CLAUDE.md undershoot their stated parameter targets under this block
+# definition (e.g. 6 layers x d=128 -> ~1.2M, not ~3M). Widths/depths below were
+# recomputed to hit the targets. The EXACT count (embeddings included) is measured
+# at runtime and written into every run JSON -- these numbers are only the plan.
+
+tiny:
+  n_layers: 2
+  d_model: 48
+  n_heads: 4
+  ff_mult: 4
+  target_params: 50_000
+  predicted_params: 55_700      # 12*48^2*2
+
+small:
+  n_layers: 3
+  d_model: 72
+  n_heads: 4
+  ff_mult: 4
+  target_params: 200_000
+  predicted_params: 187_000     # 12*72^2*3
+
+medium:
+  n_layers: 4
+  d_model: 128
+  n_heads: 8
+  ff_mult: 4
+  target_params: 800_000
+  predicted_params: 786_000     # 12*128^2*4
+
+large:
+  n_layers: 7
+  d_model: 192
+  n_heads: 8
+  ff_mult: 4
+  target_params: 3_000_000
+  predicted_params: 3_097_000   # 12*192^2*7

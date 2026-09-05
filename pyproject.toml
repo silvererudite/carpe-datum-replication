@@ -1,0 +1,36 @@
+[project]
+name = "jet-scaling-replication"
+version = "0.1.0"
+description = "Rigor-first replication of jet-tagging neural scaling laws on the public Top Quark Tagging Reference Dataset"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "torch>=2.4",          # models + training (MPS backend on Apple silicon; no CUDA here)
+    "numpy>=1.26",
+    "h5py>=3.11",          # raw HDF5 access
+    "tables>=3.9",         # pandas.read_hdf backend -- REQUIRED for the pandas-format .h5 files
+    "pandas>=2.2",
+    "scipy>=1.13",         # scipy.optimize for the Huber-loss parametric fit
+    "scikit-learn>=1.5",   # AUC / background rejection sanity metrics only
+    "matplotlib>=3.9",
+    "tqdm>=4.66",
+    "pyyaml>=6.0",         # run configs
+    "einops>=0.8",         # readable attention reshapes
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "jupyter>=1.1",
+    "ipykernel>=6.29",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/jetscaling"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

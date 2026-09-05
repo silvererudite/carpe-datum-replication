@@ -1,0 +1,70 @@
+# The (N, D) sweep. sweep.py reads ONLY this file (plus model_sizes.yaml).
+# Nothing here may be overridden from the command line except --dry-run and
+# --only <cell>, so that the grid on disk is always the grid that was run.
+
+meta:
+  name: "topjets-scaling-v1"
+  preregistered: "docs/preregistration.md"
+
+data:
+  source: zenodo                 # zenodo | pd4ml   (see docs/deviations.md D-001)
+  train_file: data/train.h5
+  eval_file: data/test.h5
+  # Fixed evaluation slice: IDENTICAL for every run in the sweep. This is what
+  # makes the 16 loss values comparable at all. Never resample it.
+  eval_n_jets: 200_000
+  eval_slice_start: 0
+  # pT-ordered constituent cap (deviation D-003). Tokens per jet = this number.
+  max_constituents: 64
+  # Draw of the D-subsample is fixed and INDEPENDENT of the run seed, so that
+  # seed-repeat runs differ only in init/shuffle, not in which jets they see.
+  subsample_seed: 20260905
+  # Nested subsamples: the 50k set is a subset of the 150k set, etc. Prevents
+  # a lucky/unlucky draw at one D from masquerading as a data-scaling effect.
+  nested_subsamples: true
+
+axes:
+  D_values: [50_000, 150_000, 500_000, 1_200_000]     # jets
+  N_names:  [tiny, small, medium, large]              # -> configs/model_sizes.yaml
+
+# ONE recipe. Not tuned per run. Changing anything here invalidates the sweep.
+recipe:
+  epochs: 1                      # single pass -- the single-epoch regime
+  batch_size: 256
+  optimizer: adamw
+  lr_peak: 3.0e-4
+  lr_min_frac: 0.1               # cosine floor = lr_min_frac * lr_peak
+  warmup_frac: 0.05              # fraction of THIS run's total steps
+  schedule: cosine_to_end        # T_max = this run's total steps, not a constant.
+                                 # Kaplan-vs-Chinchilla lesson: a schedule longer
+                                 # than the run biases small-D losses upward and
+                                 # corrupts the D exponent.
+  weight_decay: 0.01
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  dtype: float32                 # MPS: bf16 autocast is not trustworthy yet; keep fp32
+  seed: 0                        # base seed for the 16 grid cells
+
+# Seed-variance check: how much of the grid signal is just run-to-run noise?
+seed_repeats:
+  seeds: [1, 2, 3]
+  cells:
+    - {N: tiny,   D: 150_000}
+    - {N: medium, D: 500_000}
+
+# What every run must write to results/runs/<run_id>.json. train.py validates
+# this list before it writes; a missing key is an error, not a warning.
+run_json_required_keys:
+  - run_id
+  - params_exact          # measured, embeddings included
+  - N_name
+  - D
+  - seed
+  - final_val_loss        # nats, on the fixed eval slice
+  - val_auc
+  - wall_time_s
+  - lr_schedule           # resolved: peak, warmup steps, total steps
+  - git_commit
+  - config_hash
+  - device
+  - tokens_seen

@@ -36,25 +36,78 @@ which is why the prediction has to be written down before the number exists.
 
 ## Entries
 
-### PREDICTION 2026-09-05 — before writing any of the pipeline
+### How to fill a prediction row (worked example — not one of your predictions)
 
-Fill these in before `read_four_vectors` returns its first array. Numbers, not adjectives.
+The unit of a prediction is a **range**, not a number. State an interval you are ~90%
+sure contains the truth, plus a best guess inside it. A surprise is then defined
+mechanically: the actual lands outside your range.
 
-| Quantity | My prediction | Confidence | Actual |
-|---|---|---|---|
-| Median fraction of jet pT in the leading 64 constituents | | | |
-| L_inf (irreducible BCE, nats) | | | |
-| α (model exponent) | | | |
-| β (data exponent) | | | |
-| σ_seed at (tiny, 150k) | | | |
-| Which functional form wins the LOO test | | | |
-| Will the residuals show an N×D interaction pattern? | | | |
-| Wall clock for the full 22-run sweep | | | |
+That definition is what makes this calibratable. Over the project you will make ~10
+predictions; roughly 1 should land outside its 90% range. **Never** wrong means your
+ranges are so wide they assert nothing. **Often** wrong means you are overconfident.
+Both are worth knowing about yourself before you start interpreting fits.
 
-Then, the two that matter most, in prose:
+Worked example — L_inf, reasoned from things already known:
 
-**What would have to be true for claim C1 to fail?** (write it now, while you have no
-stake in the answer)
+> **Bracket it from above and below.** BCE in nats on a balanced binary task: chance is
+> ln 2 = 0.693, perfect is 0. So L_inf lies in (0, 0.693) and — since L_inf is the
+> asymptote — strictly below the best loss any of my 22 runs achieves.
+>
+> **Find an anchor.** Strong published top taggers on this exact dataset reach ~94%
+> accuracy / ~0.986 AUC. A calibrated classifier at that accuracy has BCE roughly
+> 0.15–0.25. Those taggers are large, use up to 200 constituents, and are trained on the
+> full 1.2M — so they are an upper bound on what the *task* permits, not a floor.
+>
+> **Adjust for my handicaps.** I cap at 64 constituents (throws away real substructure
+> information, raises the floor) and use kinematics only. But L_inf is the
+> infinite-N, infinite-D limit, which is *lower* than anything I will measure.
+> These push in opposite directions.
+>
+> **Do NOT anchor on the reference's 0.619.** That is a different task and possibly a
+> different number of classes — if flavour tagging is 3-class, its chance baseline is
+> ln 3 = 1.099, not 0.693, and the two L_inf values are not on the same scale at all.
+> (Worth confirming when the note is read — see D-002.)
+>
+> → **90% range 0.08–0.30, best guess 0.17, confidence low.**
 
-**If α comes out near β — same order, CI on α−β straddling zero — what are the three
-most likely causes, ranked?**
+The reasoning line matters more than the number. When you are later wrong, the line tells
+you *which step* of the reasoning failed — and that is the finding.
+
+---
+
+## Entries
+
+### PREDICTION — before writing any of the pipeline
+
+Fill this in before `read_four_vectors` returns its first array. Ranges, not adjectives.
+Twenty minutes. Low confidence is a fine answer; a blank row is not.
+
+| Quantity | 90% range | Best guess | One-line reasoning | Actual |
+|---|---|---|---|---|
+| Median fraction of jet pT in the leading 64 constituents | | | | |
+| L_inf (nats) | | | | |
+| α (model exponent) | | | | |
+| β (data exponent) | | | | |
+| α/β | | | | |
+| σ_seed at (tiny, 150k), nats | | | | |
+| Loss gap between adjacent cells in one row, nats | | | | |
+| Which form wins the LOO test, and on how many of 16 | | | | |
+| Fraction of the 4500 fit inits reaching the best objective | | | | |
+| Wall clock for all 22 runs, hours | | | | |
+
+Anchors you already have (use them, adjust from them, say which way and why):
+
+- chance-level BCE = ln 2 = 0.693; your N range spans 1.74 dex, your D range 1.38 dex
+- Kaplan et al.: α_N ≈ 0.076, α_D ≈ 0.095 — LLMs, huge N range, known schedule bug
+- Chinchilla: α ≈ 0.34, β ≈ 0.28 — the "scale both equally" regime
+- the reference note: α = 0.677, β = 0.077 — flavour tagging, much larger scale
+- rows 6 and 7 together decide whether your grid can resolve anything at all
+
+Two in prose, and these are the ones worth the most:
+
+**What would have to be true for C1 to fail?** Write it now, while you have no stake in
+the answer.
+
+**If α comes out near β — CI on α−β straddling zero — what are the three most likely
+causes, ranked?** Ranking them now, before you know, is what stops the first plausible
+story from becoming the explanation later.

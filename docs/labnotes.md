@@ -82,18 +82,22 @@ you *which step* of the reasoning failed — and that is the finding.
 Fill this in before `read_four_vectors` returns its first array. Ranges, not adjectives.
 Twenty minutes. Low confidence is a fine answer; a blank row is not.
 
-| Quantity | 90% range | Best guess | One-line reasoning | Actual |
-|---|---|---|---|---|
-| Median fraction of jet pT in the leading 64 constituents | | | | |
-| L_inf (nats) | | | | |
-| α (model exponent) | | | | |
-| β (data exponent) | | | | |
-| α/β | | | | |
-| σ_seed at (tiny, 150k), nats | | | | |
-| Loss gap between adjacent cells in one row, nats | | | | |
-| Which form wins the LOO test, and on how many of 16 | | | | |
-| Fraction of the 4500 fit inits reaching the best objective | | | | |
-| Wall clock for all 22 runs, hours | | | | |
+The **kind** column says what sort of reasoning each row needs. Eight of the ten are ML,
+statistics or systems questions — physics enters in exactly two places, and one of those
+you can measure in five minutes.
+
+| Quantity | Kind | 90% range | Best guess | One-line reasoning | Actual |
+|---|---|---|---|---|---|
+| Median fraction of jet pT in the leading 64 constituents | physics (but measurable in 5 min) | | | | |
+| L_inf (nats) | physics anchor + ML | | | | |
+| α (model exponent) | ML / scaling laws | | | | |
+| β (data exponent) | ML / scaling laws | | | | |
+| α/β | ML / scaling laws | | | | |
+| σ_seed at (tiny, 150k), nats | ML / noise budget | | | | |
+| Loss gap between adjacent cells in one row, nats | ML / arithmetic | | | | |
+| Which form wins the LOO test, and on how many of 16 | statistics | | | | |
+| Fraction of the 4500 fit inits reaching the best objective | optimisation | | | | |
+| Wall clock for all 22 runs, hours | systems | | | | |
 
 Anchors you already have (use them, adjust from them, say which way and why):
 
@@ -102,6 +106,32 @@ Anchors you already have (use them, adjust from them, say which way and why):
 - Chinchilla: α ≈ 0.34, β ≈ 0.28 — the "scale both equally" regime
 - the reference note: α = 0.677, β = 0.077 — flavour tagging, much larger scale
 - rows 6 and 7 together decide whether your grid can resolve anything at all
+
+### Second worked example — σ_seed, by decomposing the noise budget
+
+No physics in this one at all. Where can run-to-run variation in final eval loss come
+from?
+
+1. **Eval-set sampling noise.** Per-jet BCE has a spread of order 0.5 nats, so the
+   standard error of the mean over 200k jets is ~0.5/sqrt(2e5) ≈ 0.001 nats. But the eval
+   set is *fixed and identical across runs*, so this is a common offset, not run-to-run
+   variance — **it cancels in every comparison you care about.** (That is a second, less
+   obvious reason the fixed eval slice matters.)
+2. **Init + shuffle order.** What is actually left. For a small model on a short
+   single-epoch run, this is the whole budget.
+3. **Nondeterministic kernels.** MPS reductions are not bit-reproducible; tiny, and
+   swamped by (2).
+
+So σ_seed ≈ the training-stochasticity term alone, and your prior for that comes from
+every small model you have ever trained twice. Note the direction: **short runs are
+noisier**, so σ_seed at (tiny, 150k) is an upper bound for the better-resolved cells.
+
+Then do the arithmetic that actually matters. If β ≈ 0.1 and the D-term contributes
+~0.3 nats, then across the 24× D range the loss moves by 24^0.1 ≈ 1.37×, i.e. ~0.09 nats
+total, ~0.03 per adjacent column. Against σ_seed of 0.005 that is a signal-to-noise of 6
+— resolvable. Against σ_seed of 0.02 it is 1.5, and your grid measures almost nothing.
+**Two guesses, one division, and you know whether the experiment can work.** Do this
+before running it, not after.
 
 Two in prose, and these are the ones worth the most:
 

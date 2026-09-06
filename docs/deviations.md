@@ -19,6 +19,7 @@ deleted.
 | D-005 | 2026-09-05 | Apple M4 / MPS / fp32 instead of a CUDA GPU | unknown |
 | D-006 | 2026-09-05 | Added `tables` (PyTables) to the dependency list | benign |
 | D-007 | 2026-09-05 | `pandas` pinned to < 3; pandas 3.x cannot read this dataset | benign |
+| D-008 | 2026-09-05 | Added background rejection at 30% signal efficiency to the run JSON | benign |
 
 ---
 
@@ -180,6 +181,22 @@ The fast path the feature cache should use is PyTables directly (~10× faster th
 `read_hdf`, 200k rows in ~0.2 s); the block column order was verified identical to the
 DataFrame column order, so `values_block_0[:, :800].reshape(-1, 200, 4)` is exact. Both
 paths were cross-checked to return identical values. Details in `src/jetscaling/data.py`.
+
+## D-008 — background rejection at 30% signal efficiency added to the run JSON
+
+**Class: benign.** *(An additional reported metric. No pre-registered claim uses it.)*
+
+Every claim in this replication is stated on BCE in nats, which is the right target for a
+scaling fit — it is the quantity the parametric form is about. But it is not what the top
+tagging literature reports. That community reports **1/ε_B at ε_S = 0.3** (background
+rejection at 30% signal efficiency), and the reference numbers in arXiv:1902.09914 are in
+those units.
+
+Recording only BCE would make these runs unreadable to a domain expert asked to sanity
+check them — there would be no way to tell a reasonable tagger from a broken one. Added
+as a reported-only key in `configs/grid.yaml`; the fit target is unchanged.
+
+Added before any training run.
 
 ---
 

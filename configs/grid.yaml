@@ -62,6 +62,10 @@ run_json_required_keys:
   - seed
   - final_val_loss        # nats, on the fixed eval slice
   - val_auc
+  - val_bkg_rej_at_eps_s_30   # 1/eps_B at 30% signal efficiency -- the metric the top-
+                              # tagging literature reports (D-008). Not used by any
+                              # pre-registered claim; recorded so a physicist can judge
+                              # whether these runs are sane. BCE stays the fit target.
   - wall_time_s
   - lr_schedule           # resolved: peak, warmup steps, total steps
   - git_commit
